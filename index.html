@@ -470,7 +470,12 @@
         });
 
         const totalValue = wholeCount + (halfCount * 0.5);
-        let totalDisplay = (totalValue % 1 === 0.5) ? `${Math.floor(totalValue)} 1/2` : totalValue;
+
+        // Formats fractional parts using compact '½' (e.g. 0.5 -> "½", 7.5 -> "7½")
+        const floorVal = Math.floor(totalValue);
+        let totalDisplay = (totalValue % 1 === 0.5) 
+            ? (floorVal === 0 ? '½' : `${floorVal}½`) 
+            : totalValue;
         
         return `${totalDisplay} (${wholeCount} whole, ${halfCount} half)`;
     }
