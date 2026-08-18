@@ -449,6 +449,32 @@
         return num.toString();
     }
 
+    function calculateRiceBreakdown(orderLogArray) {
+        let wholeCount = 0;
+        let halfCount = 0;
+
+        orderLogArray.forEach(entry => {
+            entry.items.forEach(i => {
+                const itemName = i.item.toLowerCase();
+                if (itemName.includes('rice')) {
+                    if (itemName.includes('half') || i.qty === 0.5) {
+                        halfCount += (i.qty === 0.5) ? 1 : i.qty;
+                    } else if (itemName.includes('whole') || i.qty >= 1) {
+                        const whole = Math.floor(i.qty);
+                        const rem = i.qty % 1;
+                        wholeCount += whole;
+                        if (rem === 0.5) halfCount += 1;
+                    }
+                }
+            });
+        });
+
+        const totalValue = wholeCount + (halfCount * 0.5);
+        let totalDisplay = (totalValue % 1 === 0.5) ? `${Math.floor(totalValue)} 1/2` : totalValue;
+        
+        return `${totalDisplay} (${wholeCount} whole, ${halfCount} half)`;
+    }
+
     function getFormattedDate(dateString) {
         if (!dateString) return '';
         const [year, month, day] = dateString.split('-').map(Number);
@@ -719,10 +745,18 @@
         summaryBody.innerHTML = '';  
   
         let totals = {};  
-  
+        let hasRice = false;
+
         orderLog.forEach((entry, idx) => {  
             let itemDesc = buildCombinedOrderDetails(entry.items);  
-            entry.items.forEach(i => { totals[i.item] = (totals[i.item] || 0) + i.qty; });  
+            entry.items.forEach(i => { 
+                const itemName = i.item.toLowerCase();
+                if (itemName.includes('rice')) {
+                    hasRice = true;
+                } else {
+                    totals[i.item] = (totals[i.item] || 0) + i.qty; 
+                }
+            });  
   
             let tr1 = document.createElement('tr');  
             tr1.innerHTML = `  
@@ -757,6 +791,12 @@
             `;
             paymentBody.appendChild(tr2);
         });  
+
+        if (hasRice) {
+            let tr = document.createElement('tr');  
+            tr.innerHTML = `<td>rice</td><td><strong>${calculateRiceBreakdown(orderLog)}</strong></td>`;  
+            summaryBody.appendChild(tr);
+        }
   
         Object.keys(totals).forEach(item => {  
             let tr = document.createElement('tr');  
@@ -846,9 +886,24 @@
         printSummaryBody.innerHTML = '';
         
         let totals = {};
+        let hasRice = false;
+
         orderLog.forEach(entry => {
-            entry.items.forEach(i => { totals[i.item] = (totals[i.item] || 0) + i.qty; });
+            entry.items.forEach(i => {
+                const itemName = i.item.toLowerCase();
+                if (itemName.includes('rice')) {
+                    hasRice = true;
+                } else {
+                    totals[i.item] = (totals[i.item] || 0) + i.qty;
+                }
+            });
         });
+
+        if (hasRice) {
+            let tr = document.createElement('tr');
+            tr.innerHTML = `<td style="border:1px solid #000; padding:6px;">rice</td><td style="border:1px solid #000; padding:6px;"><strong>${calculateRiceBreakdown(orderLog)}</strong></td>`;
+            printSummaryBody.appendChild(tr);
+        }
         
         Object.keys(totals).forEach(item => {
             let tr = document.createElement('tr');
