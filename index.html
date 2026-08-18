@@ -268,7 +268,7 @@
         <div class="form-row">  
             <div class="form-group" style="flex-grow: 2;">  
                 <label for="orderDate">Order Date:</label>  
-                <input type="date" id="orderDate" onchange="saveAllData()">  
+                <input type="date" id="orderDate" onchange="saveAllData(); checkArchiveButtonState();">  
             </div>  
             <div class="form-group" style="flex-grow: 3;">  
                 <label for="menuItemsInput">Menu Items & Prices (format: item:price, ...):</label>  
@@ -683,8 +683,16 @@
         return;
     }
     const rawDate = document.getElementById('orderDate').value;
-    const dateStr = getFormattedDate(rawDate);
     
+    // Check if the selected date already exists in the archive database
+    const dateExists = window.archivedLogs.some(group => group.dateKey === rawDate);
+    
+    if (dateExists) {
+        alert(`The date "${rawDate}" has already been archived!\n\nPlease change the Order Date first before archiving a new day.`);
+        return;
+    }
+
+    const dateStr = getFormattedDate(rawDate);
     let calculatedDayTotal = orderLog.reduce((sum, order) => sum + (parseFloat(order.customTotal) || 0), 0);
 
     const archiveGroup = {
@@ -696,13 +704,31 @@
         dayTotal: calculatedDayTotal.toFixed(2)
     };
 
-    // Pushes directly to permanent database location
     window.saveArchiveToDatabase(archiveGroup);
 
-    // Clear active log
     orderLog = [];
     window.saveAllData();
     }
+    function checkArchiveButtonState() {
+    const rawDate = document.getElementById('orderDate').value;
+    const archiveBtn = document.querySelector('.btn-archive');
+    if (!archiveBtn) return;
+
+    const dateExists = (window.archivedLogs || []).some(group => group.dateKey === rawDate);
+    
+    if (dateExists) {
+        archiveBtn.disabled = true;
+        archiveBtn.style.opacity = '0.5';
+        archiveBtn.style.cursor = 'not-allowed';
+        archiveBtn.title = 'This date is already archived. Change the date to archive.';
+    } else {
+        archiveBtn.disabled = false;
+        archiveBtn.style.opacity = '1';
+        archiveBtn.style.cursor = 'pointer';
+        archiveBtn.title = '';
+    }
+}
+
     function editOrder(index) {
         editingIndex = index;
         const entry = orderLog[index];
@@ -861,6 +887,7 @@
         }
 
         calculateGrandTotal();
+        checkArchiveButtonState();
         if (shouldSave && window.saveAllData) window.saveAllData();
     }
 
