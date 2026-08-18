@@ -245,7 +245,7 @@
             padding: 8px 12px;
             border: 1px solid #27ae60;
             border-radius: 4px;
-            width: 150px;
+            width: 170px;
         }
 
         #print-area { display: none; }  
@@ -260,7 +260,6 @@
             body { background-color: white; margin: 0; }  
             .container { box-shadow: none; padding: 0; }  
             
-            /* Page 1 Bottom Alignment */
             .print-page-1 {
                 position: relative;
                 min-height: 9.8in;
@@ -385,7 +384,6 @@
 
 <!-- PRINTABLE TEMPLATE -->  
 <div id="print-area">  
-    <!-- Page 1: Kitchen Summary Pinned to Bottom -->
     <div class="print-page-1">
         <div>
             <h2 style="text-align: center; margin-bottom: 5px; font-size: 1.3rem;">ORDER SUMMARY</h2>  
@@ -407,7 +405,6 @@
         </div>
     </div>
 
-    <!-- Page 2: Order Details Breakdown -->
     <div class="print-page-break">
         <h2 style="text-align: center; margin-bottom: 5px; font-size: 1.3rem; padding-top: 10px;">ORDER DETAILS BREAKDOWN</h2>  
         <h4 style="text-align: center; margin-top: 0; font-weight: normal;" class="printDateHeading"></h4>  
@@ -426,28 +423,29 @@
     </div>
 </div>  
 
-<!-- APPLICATION LOGIC -->
 <script>  
     var availableMenu = {};  
     var orderLog = [];  
     var archivedLogs = []; 
     var editingIndex = -1;
 
-    // Fallback stub functions until Firebase Module loads
     window.saveAllData = function() {};
     window.saveArchiveToDatabase = function() {};
 
     document.getElementById('orderDate').valueAsDate = new Date();  
 
-    // Formatting helper to convert numbers or string amounts into 3-digit comma formatted strings
-    function formatCurrency(amount) {
-        const num = parseFloat(String(amount).replace(/,/g, '')) || 0;
-        return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    // Safely parse numbers by removing non-numeric characters except decimals
+    function parseAmount(amount) {
+        if (typeof amount === 'number') return amount;
+        if (!amount) return 0;
+        const cleaned = String(amount).replace(/[^0-9.-]/g, '');
+        return parseFloat(cleaned) || 0;
     }
 
-    // Parses formatted inputs back to clean floats for mathematical calculations
-    function parseAmount(amount) {
-        return parseFloat(String(amount).replace(/,/g, '')) || 0;
+    // Always formats numbers to 1,000.00 standard
+    function formatCurrency(amount) {
+        const num = parseAmount(amount);
+        return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
 
     function formatQuantity(num) {
@@ -683,7 +681,6 @@
             return;
         }
         const rawDate = document.getElementById('orderDate').value;
-        
         const dateExists = archivedLogs.some(group => group.dateKey === rawDate);
         
         if (dateExists) {
@@ -704,7 +701,6 @@
         };
 
         window.saveArchiveToDatabase(archiveGroup);
-
         orderLog = [];
         window.saveAllData();
     }
@@ -808,7 +804,7 @@
             tr2.innerHTML = `
                 <td><strong>${entry.name}</strong></td>
                 <td>
-                    <input type="text" class="price-input" value="${formattedVal}" oninput="updateCustomTotal(${idx}, this.value)" onblur="formatInputOnBlur(this, ${idx})">
+                    <input type="text" class="price-input" value="${formattedVal}" onchange="updateCustomTotal(${idx}, this.value)" onblur="formatInputOnBlur(this, ${idx})">
                 </td>
                 <td class="${statusClass}">${entry.paymentStatus}</td>
                 <td>${entry.paidTimeStamp || '—'}</td>
@@ -873,7 +869,7 @@
                     html += `<tr>
                         <td><strong>${entry.name}</strong></td>
                         <td>${itemDesc}</td>
-                        <td><input type="text" class="price-input" value="${formattedVal}" oninput="updateCustomTotal(${idx}, this.value, true, ${gIdx})" onblur="formatInputOnBlur(this, ${idx}, true, ${gIdx})"></td>
+                        <td><input type="text" class="price-input" value="${formattedVal}" onchange="updateCustomTotal(${idx}, this.value, true, ${gIdx})" onblur="formatInputOnBlur(this, ${idx}, true, ${gIdx})"></td>
                         <td class="${statusClass}">${entry.paymentStatus}</td>
                         <td>${entry.paidTimeStamp || '—'}</td>
                         <td>
@@ -899,7 +895,7 @@
                         </div>
                         <div class="archive-inputs-row">
                             <span class="archive-label">Day Total:</span>
-                            <input type="text" id="dayTotalInput-${gIdx}" class="day-total-input" value="${formattedDayTotal}" onchange="updateArchiveMeta(${gIdx}, 'dayTotal', this.value)">
+                            <input type="text" id="dayTotalInput-${gIdx}" class="day-total-input" value="${formattedDayTotal}" onblur="this.value = formatCurrency(this.value);" onchange="updateArchiveMeta(${gIdx}, 'dayTotal', this.value)">
                         </div>
                     </div>`;
 
@@ -958,7 +954,6 @@
         window.print();
     }
 
-    // Initialize menu options on page load
     updateMenuOptions(false);
 </script>
 
@@ -984,7 +979,6 @@
     const activeRef = ref(db, 'activeOrdersState');
     const archiveRef = ref(db, 'archivedDaysHistory');
 
-    // Attach sync functions to global window object
     window.saveAllData = function() {
         const appState = {
             orderDate: document.getElementById('orderDate').value,
@@ -1007,7 +1001,6 @@
         }
     };
 
-    // Real-time listener for active state
     onValue(activeRef, (snapshot) => {
         const badge = document.getElementById('syncBadge');
         if (badge) {
@@ -1026,7 +1019,6 @@
         renderTables(false);
     });
 
-    // Real-time listener for database archives
     onValue(archiveRef, (snapshot) => {
         const data = snapshot.val();
         archivedLogs = [];
