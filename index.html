@@ -248,14 +248,22 @@
             width: 140px;
         }
 
-        /* Bottom alignment for total summary quantity cell */
-        .align-bottom {
-            vertical-align: bottom !important;
-        }
-
         #print-area { display: none; }  
 
+        /* Page 1 Bottom Alignment Styles for Print */
+        .print-page-1 {
+            height: 98vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            box-sizing: border-box;
+        }
+
         @media print {  
+            @page {
+                size: A4;
+                margin: 10mm;
+            }
             .no-print { display: none !important; }  
             #print-area { display: block !important; }  
             body { background-color: white; margin: 0; }  
@@ -368,22 +376,26 @@
 
 <!-- PRINTABLE TEMPLATE -->  
 <div id="print-area">  
-    <!-- Page 1: Kitchen Summary -->
-    <div>
-        <h2 style="text-align: center; margin-bottom: 5px; font-size: 1.3rem;">ORDER SUMMARY</h2>  
-        <h4 style="text-align: center; margin-top: 0; font-weight: normal;" class="printDateHeading"></h4>  
-        <hr style="border: 1px solid #000; margin-bottom: 20px;">  
-        
-        <h4 style="margin-bottom: 8px;">1. Total Menu Items Needed (Kitchen Summary)</h4>  
-        <table style="width:100%; border-collapse:collapse;" id="printSummaryTable">  
-            <thead>  
-                <tr style="background:#eee;">  
-                    <th style="border:1px solid #000; padding:6px;">Item Name</th>  
-                    <th style="border:1px solid #000; padding:6px; vertical-align: bottom;">Total Quantity</th>  
-                </tr>  
-            </thead>  
-            <tbody></tbody>  
-        </table>  
+    <!-- Page 1: Kitchen Summary (Flex container forces total table to full bottom alignment) -->
+    <div class="print-page-1">
+        <div>
+            <h2 style="text-align: center; margin-bottom: 5px; font-size: 1.3rem;">ORDER SUMMARY</h2>  
+            <h4 style="text-align: center; margin-top: 0; font-weight: normal;" class="printDateHeading"></h4>  
+            <hr style="border: 1px solid #000; margin-bottom: 20px;">  
+        </div>
+
+        <div style="margin-top: auto;">
+            <h4 style="margin-bottom: 8px;">1. Total Menu Items Needed (Kitchen Summary)</h4>  
+            <table style="width:100%; border-collapse:collapse;" id="printSummaryTable">  
+                <thead>  
+                    <tr style="background:#eee;">  
+                        <th style="border:1px solid #000; padding:6px;">Item Name</th>  
+                        <th style="border:1px solid #000; padding:6px; text-align: right;">Total Quantity</th>  
+                    </tr>  
+                </thead>  
+                <tbody></tbody>  
+            </table>  
+        </div>
     </div>
 
     <!-- Page 2: Order Details Breakdown -->
@@ -739,7 +751,7 @@
   
         Object.keys(totals).forEach(item => {  
             let tr = document.createElement('tr');  
-            tr.innerHTML = `<td>${item}</td><td class="align-bottom"><strong>${formatQuantity(totals[item])}</strong></td>`;  
+            tr.innerHTML = `<td>${item}</td><td><strong>${formatQuantity(totals[item])}</strong></td>`;  
             summaryBody.appendChild(tr);  
         });  
 
@@ -824,7 +836,6 @@
         const printSummaryBody = document.querySelector('#printSummaryTable tbody');
         printSummaryBody.innerHTML = '';
         
-        // Re-build summary table with bottom-aligned quantity cells
         let totals = {};
         orderLog.forEach(entry => {
             entry.items.forEach(i => { totals[i.item] = (totals[i.item] || 0) + i.qty; });
@@ -832,7 +843,7 @@
         
         Object.keys(totals).forEach(item => {
             let tr = document.createElement('tr');
-            tr.innerHTML = `<td style="border:1px solid #000; padding:6px;">${item}</td><td style="border:1px solid #000; padding:6px; vertical-align: bottom;"><strong>${formatQuantity(totals[item])}</strong></td>`;
+            tr.innerHTML = `<td style="border:1px solid #000; padding:6px;">${item}</td><td style="border:1px solid #000; padding:6px; text-align: right;"><strong>${formatQuantity(totals[item])}</strong></td>`;
             printSummaryBody.appendChild(tr);
         });
 
