@@ -356,7 +356,7 @@
         </div>
 
         <div id="archiveList"></div>
-        <button class="btn-clear-all" onclick="clearAllData()">Reset All Cloud Data</button>
+        <button class="btn-clear-all" onclick="clearActiveOnly()">Clear Active Day Only</button>
         <div style="clear: both;"></div>
     </div>
 </div>  
@@ -660,14 +660,17 @@
     }
 
     function updateArchiveMeta(gIdx, field, value) {
-        if (archivedLogs[gIdx]) {
-            archivedLogs[gIdx][field] = value;
-            if (field === 'dayTotal') {
-                calculateGrandTotal();
-            }
-            if (window.saveAllData) window.saveAllData();
+    if (archivedLogs[gIdx]) {
+        archivedLogs[gIdx][field] = value;
+        if (field === 'dayTotal') {
+            calculateGrandTotal();
+        }
+        // Save updated archived group back to Firebase
+        if (window.saveArchiveToDatabase) {
+            window.saveArchiveToDatabase(archivedLogs[gIdx]);
         }
     }
+}
 
     function calculateGrandTotal() {
         let grandTotal = archivedLogs.reduce((sum, group) => sum + (parseFloat(group.dayTotal) || 0), 0);
