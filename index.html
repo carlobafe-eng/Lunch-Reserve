@@ -284,7 +284,7 @@
         <div class="form-row">  
             <div class="form-group">  
                 <label for="personName">Person's Name:</label>  
-                <input type="text" id="personName" placeholder="Customer's Name">  
+                <input type="text" id="personName" placeholder="e.g. Jessa">  
             </div>  
         </div>  
 
@@ -356,7 +356,7 @@
         </div>
 
         <div id="archiveList"></div>
-        <button class="btn-clear-all" onclick="clearActiveOnly()">Clear Active Day Only</button>
+        <button class="btn-clear-all" onclick="clearAllData()">Reset All Cloud Data</button>
         <div style="clear: both;"></div>
     </div>
 </div>  
@@ -412,7 +412,7 @@
 <!-- FIREBASE REALTIME DATABASE INTEGRATION -->
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-    import { getDatabase, ref, set, onValue, remove } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+    import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
     const firebaseConfig = {
         apiKey: "AIzaSyCteao4i_S-uA6wpfoDIj7BFwuPwJHEmGY",
@@ -427,39 +427,31 @@
 
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
+    const dbRef = ref(db, 'orderTrackerState');
 
-    // References
-    const activeRef = ref(db, 'activeOrdersState');
-    const archiveRef = ref(db, 'archivedDaysHistory');
-
-    // Save active state to cloud
     window.saveAllData = function() {
         const appState = {
             orderDate: document.getElementById('orderDate').value,
             menuItemsInput: document.getElementById('menuItemsInput').value,
-            orderLog: window.orderLog || []
+            orderLog: window.orderLog,
+            archivedLogs: window.archivedLogs
         };
-        set(activeRef, appState);
+        set(dbRef, appState);
     };
 
-    // Save a completed day permanently to database archive
-    window.saveArchiveToDatabase = function(archiveGroup) {
-        // Sanitize date for Firebase key
-        const rawDate = document.getElementById('orderDate').value || new Date().toISOString().split('T')[0];
-        const dayRef = ref(db, `archivedDaysHistory/${rawDate}`);
-        set(dayRef, archiveGroup);
-    };
-
-    // Resets ONLY active logs without deleting history
-    window.clearActiveOnly = function() {
-        if (confirm("Clear current active list for a new start? (Past archived days will stay saved in database)")) {
-            window.orderLog = [];
-            window.saveAllData();
+    window.clearAllData = function() {
+        if (confirm("Are you sure you want to clear all cloud data? This will reset the app across all devices.")) {
+            set(dbRef, {
+                orderDate: document.getElementById('orderDate').value,
+                menuItemsInput: document.getElementById('menuItemsInput').value,
+                orderLog: [],
+                archivedLogs: []
+            });
         }
     };
 
-    // Real-time listener for active table
-    onValue(activeRef, (snapshot) => {
+    // Real-time listener for live cross-device sync
+    onValue(dbRef, (snapshot) => {
         const data = snapshot.val();
         const badge = document.getElementById('syncBadge');
         if (badge) {
@@ -470,23 +462,12 @@
             if (data.orderDate) document.getElementById('orderDate').value = data.orderDate;
             if (data.menuItemsInput) document.getElementById('menuItemsInput').value = data.menuItemsInput;
             window.orderLog = data.orderLog || [];
+            window.archivedLogs = data.archivedLogs || [];
         } else {
             window.orderLog = [];
+            window.archivedLogs = [];
         }
         window.updateMenuOptions(false);
-        window.renderTables(false);
-    });
-
-    // Real-time listener for permanent database archives
-    onValue(archiveRef, (snapshot) => {
-        const data = snapshot.val();
-        window.archivedLogs = [];
-        if (data) {
-            // Convert database object into array for display
-            Object.keys(data).forEach(dateKey => {
-                window.archivedLogs.push(data[dateKey]);
-            });
-        }
         window.renderTables(false);
     });
 </script>
@@ -660,14 +641,13 @@
     }
 
     function updateArchiveMeta(gIdx, field, value) {
-    if (archivedLogs[gIdx]) {
-        archivedLogs[gIdx][field] = value;
-        if (field === 'dayTotal') {
-            calculateGrandTotal();
+        if (archivedLogs[gIdx]) {
+            archivedLogs[gIdx][field] = value;
+            if (field === 'dayTotal') {
+                calculateGrandTotal();
+            }
+            if (window.saveAllData) window.saveAllData();
         }
-        // Saves updated archive group back to Firebase
-        if (window.saveArchiveToDatabase) window.saveArchiveToDatabase(archivedLogs[gIdx]);
-    }
     }
 
     function calculateGrandTotal() {
@@ -676,30 +656,23 @@
     }
 
     function archiveCurrentDay() {
-    if (orderLog.length === 0) {
-        alert('No active orders to archive.');
-        return;
-    }
-    const rawDate = document.getElementById('orderDate').value;
-    const dateStr = getFormattedDate(rawDate);
-    
-    let calculatedDayTotal = orderLog.reduce((sum, order) => sum + (parseFloat(order.customTotal) || 0), 0);
+        if (orderLog.length === 0) {
+            alert('No active orders to archive.');
+            return;
+        }
+        const dateStr = getFormattedDate(document.getElementById('orderDate').value);
+        
+        let calculatedDayTotal = orderLog.reduce((sum, order) => sum + (parseFloat(order.customTotal) || 0), 0);
 
-    const archiveGroup = {
-        dateKey: rawDate,
-        date: dateStr,
-        orders: JSON.parse(JSON.stringify(orderLog)),
-        gcashRef1: '',
-        gcashRef2: '',
-        dayTotal: calculatedDayTotal.toFixed(2)
-    };
-
-    // Pushes directly to permanent database location
-    window.saveArchiveToDatabase(archiveGroup);
-
-    // Clear active log
-    orderLog = [];
-    window.saveAllData();
+        archivedLogs.unshift({
+            date: dateStr,
+            orders: JSON.parse(JSON.stringify(orderLog)),
+            gcashRef1: '',
+            gcashRef2: '',
+            dayTotal: calculatedDayTotal.toFixed(2)
+        });
+        orderLog = [];
+        renderTables();
     }
 
     function editOrder(index) {
