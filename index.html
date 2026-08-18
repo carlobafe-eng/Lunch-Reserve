@@ -170,7 +170,7 @@
         .status-unpaid { color: #e74c3c; font-weight: bold; }
 
         .price-input {
-            width: 100px;
+            width: 110px;
             padding: 6px;
             font-weight: bold;
         }
@@ -245,7 +245,7 @@
             padding: 8px 12px;
             border: 1px solid #27ae60;
             border-radius: 4px;
-            width: 140px;
+            width: 150px;
         }
 
         #print-area { display: none; }  
@@ -439,6 +439,17 @@
 
     document.getElementById('orderDate').valueAsDate = new Date();  
 
+    // Formatting helper to convert numbers or string amounts into 3-digit comma formatted strings
+    function formatCurrency(amount) {
+        const num = parseFloat(String(amount).replace(/,/g, '')) || 0;
+        return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    // Parses formatted inputs back to clean floats for mathematical calculations
+    function parseAmount(amount) {
+        return parseFloat(String(amount).replace(/,/g, '')) || 0;
+    }
+
     function formatQuantity(num) {
         if (num === 0.5) return 'half';
         const whole = Math.floor(num);
@@ -471,7 +482,6 @@
 
         const totalValue = wholeCount + (halfCount * 0.5);
 
-        // Formats fractional parts using compact '½' (e.g. 0.5 -> "½", 7.5 -> "7½")
         const floorVal = Math.floor(totalValue);
         let totalDisplay = (totalValue % 1 === 0.5) 
             ? (floorVal === 0 ? '½' : `${floorVal}½`) 
@@ -494,7 +504,8 @@
     }
 
     function calculatePersonTotal(items) {
-        return items.reduce((sum, i) => sum + (i.qty * (availableMenu[i.item] || 0)), 0);
+        const rawTotal = items.reduce((sum, i) => sum + (i.qty * (availableMenu[i.item] || 0)), 0);
+        return formatCurrency(rawTotal);
     }
 
     function updateMenuOptions(shouldSave = true) {  
@@ -521,7 +532,7 @@
         row.className = 'item-qty-row';  
   
         let optionsHTML = Object.keys(availableMenu).map(i => 
-            `<option value="${i}" ${i === selectedItem ? 'selected' : ''}>${i} (₱${availableMenu[i]})</option>`
+            `<option value="${i}" ${i === selectedItem ? 'selected' : ''}>${i} (₱${formatCurrency(availableMenu[i])})</option>`
         ).join('');  
   
         row.innerHTML = `  
@@ -589,14 +600,21 @@
         }
     }
 
+    function formatInputOnBlur(elem, index, isArchived = false, archiveGroupIdx = -1) {
+        const formatted = formatCurrency(elem.value);
+        elem.value = formatted;
+        updateCustomTotal(index, formatted, isArchived, archiveGroupIdx);
+    }
+
     function recalculateArchivedDayTotal(gIdx) {
         if (!archivedLogs[gIdx]) return;
-        let sum = archivedLogs[gIdx].orders.reduce((acc, order) => acc + (parseFloat(order.customTotal) || 0), 0);
-        archivedLogs[gIdx].dayTotal = sum.toFixed(2);
+        let sum = archivedLogs[gIdx].orders.reduce((acc, order) => acc + parseAmount(order.customTotal), 0);
+        const formattedDayTotal = formatCurrency(sum);
+        archivedLogs[gIdx].dayTotal = formattedDayTotal;
         
         const dayTotalInput = document.getElementById(`dayTotalInput-${gIdx}`);
         if (dayTotalInput) {
-            dayTotalInput.value = sum.toFixed(2);
+            dayTotalInput.value = formattedDayTotal;
         }
         calculateGrandTotal();
         if (window.saveArchiveToDatabase) {
@@ -639,6 +657,11 @@
 
     function updateArchiveMeta(gIdx, field, value) {
         if (archivedLogs[gIdx]) {
+            if (field === 'dayTotal') {
+                value = formatCurrency(value);
+                const inputElem = document.getElementById(`dayTotalInput-${gIdx}`);
+                if (inputElem) inputElem.value = value;
+            }
             archivedLogs[gIdx][field] = value;
             if (field === 'dayTotal') {
                 calculateGrandTotal();
@@ -650,8 +673,8 @@
     }
 
     function calculateGrandTotal() {
-        let grandTotal = archivedLogs.reduce((sum, group) => sum + (parseFloat(group.dayTotal) || 0), 0);
-        document.getElementById('grandTotalDisplay').innerText = `₱${grandTotal.toFixed(2)}`;
+        let grandTotal = archivedLogs.reduce((sum, group) => sum + parseAmount(group.dayTotal), 0);
+        document.getElementById('grandTotalDisplay').innerText = `₱${formatCurrency(grandTotal)}`;
     }
 
     function archiveCurrentDay() {
@@ -669,7 +692,7 @@
         }
 
         const dateStr = getFormattedDate(rawDate);
-        let calculatedDayTotal = orderLog.reduce((sum, order) => sum + (parseFloat(order.customTotal) || 0), 0);
+        let calculatedDayTotal = orderLog.reduce((sum, order) => sum + parseAmount(order.customTotal), 0);
 
         const archiveGroup = {
             dateKey: rawDate,
@@ -677,7 +700,7 @@
             orders: JSON.parse(JSON.stringify(orderLog)),
             gcashRef1: '',
             gcashRef2: '',
-            dayTotal: calculatedDayTotal.toFixed(2)
+            dayTotal: formatCurrency(calculatedDayTotal)
         };
 
         window.saveArchiveToDatabase(archiveGroup);
@@ -778,11 +801,14 @@
             if (entry.paymentStatus === 'PAID (CASH)') statusClass = 'status-cash';
             if (entry.paymentStatus === 'PAID (GCASH)') statusClass = 'status-gcash';
 
+            let formattedVal = formatCurrency(entry.customTotal);
+            entry.customTotal = formattedVal;
+
             let tr2 = document.createElement('tr');
             tr2.innerHTML = `
                 <td><strong>${entry.name}</strong></td>
                 <td>
-                    <input type="text" class="price-input" value="${entry.customTotal}" oninput="updateCustomTotal(${idx}, this.value)">
+                    <input type="text" class="price-input" value="${formattedVal}" oninput="updateCustomTotal(${idx}, this.value)" onblur="formatInputOnBlur(this, ${idx})">
                 </td>
                 <td class="${statusClass}">${entry.paymentStatus}</td>
                 <td>${entry.paidTimeStamp || '—'}</td>
@@ -841,11 +867,13 @@
                     if (entry.paymentStatus === 'PAID (GCASH)') statusClass = 'status-gcash';
                     
                     let itemDesc = buildCombinedOrderDetails(entry.items);
+                    let formattedVal = formatCurrency(entry.customTotal);
+                    entry.customTotal = formattedVal;
 
                     html += `<tr>
                         <td><strong>${entry.name}</strong></td>
                         <td>${itemDesc}</td>
-                        <td><input type="text" class="price-input" value="${entry.customTotal}" oninput="updateCustomTotal(${idx}, this.value, true, ${gIdx})"></td>
+                        <td><input type="text" class="price-input" value="${formattedVal}" oninput="updateCustomTotal(${idx}, this.value, true, ${gIdx})" onblur="formatInputOnBlur(this, ${idx}, true, ${gIdx})"></td>
                         <td class="${statusClass}">${entry.paymentStatus}</td>
                         <td>${entry.paidTimeStamp || '—'}</td>
                         <td>
@@ -859,6 +887,9 @@
                 });
                 html += `</tbody></table></div>`;
 
+                let formattedDayTotal = formatCurrency(group.dayTotal);
+                group.dayTotal = formattedDayTotal;
+
                 html += `
                     <div class="archive-inputs-container">
                         <div class="archive-inputs-row">
@@ -868,7 +899,7 @@
                         </div>
                         <div class="archive-inputs-row">
                             <span class="archive-label">Day Total:</span>
-                            <input type="text" id="dayTotalInput-${gIdx}" class="day-total-input" value="${group.dayTotal || '0.00'}" onchange="updateArchiveMeta(${gIdx}, 'dayTotal', this.value)">
+                            <input type="text" id="dayTotalInput-${gIdx}" class="day-total-input" value="${formattedDayTotal}" onchange="updateArchiveMeta(${gIdx}, 'dayTotal', this.value)">
                         </div>
                     </div>`;
 
