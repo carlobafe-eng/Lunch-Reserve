@@ -268,7 +268,7 @@
         <div class="form-row">  
             <div class="form-group" style="flex-grow: 2;">  
                 <label for="orderDate">Order Date:</label>  
-                <input type="date" id="orderDate" onchange="saveAllData(); checkArchiveButtonState();">  
+                <input type="date" id="orderDate" onchange="window.saveAllData(); checkArchiveButtonState();">  
             </div>  
             <div class="form-group" style="flex-grow: 3;">  
                 <label for="menuItemsInput">Menu Items & Prices (format: item:price, ...):</label>  
@@ -409,94 +409,17 @@
     </table>
 </div>  
 
-<!-- FIREBASE REALTIME DATABASE INTEGRATION -->
-<script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-    import { getDatabase, ref, set, onValue, remove } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
-
-    const firebaseConfig = {
-        apiKey: "AIzaSyCteao4i_S-uA6wpfoDIj7BFwuPwJHEmGY",
-        authDomain: "lunch-reserve-10dd8.firebaseapp.com",
-        databaseURL: "https://lunch-reserve-10dd8-default-rtdb.asia-southeast1.firebasedatabase.app",
-        projectId: "lunch-reserve-10dd8",
-        storageBucket: "lunch-reserve-10dd8.firebasestorage.app",
-        messagingSenderId: "613747529032",
-        appId: "1:613747529032:web:8e3cbd16c0ed3d91e38f7d",
-        measurementId: "G-YTD8KTHR4M"
-    };
-
-    const app = initializeApp(firebaseConfig);
-    const db = getDatabase(app);
-
-    // References
-    const activeRef = ref(db, 'activeOrdersState');
-    const archiveRef = ref(db, 'archivedDaysHistory');
-
-    // Save active state to cloud
-    window.saveAllData = function() {
-        const appState = {
-            orderDate: document.getElementById('orderDate').value,
-            menuItemsInput: document.getElementById('menuItemsInput').value,
-            orderLog: window.orderLog || []
-        };
-        set(activeRef, appState);
-    };
-
-    // Save a completed day permanently to database archive
-    window.saveArchiveToDatabase = function(archiveGroup) {
-        // Sanitize date for Firebase key
-        const rawDate = document.getElementById('orderDate').value || new Date().toISOString().split('T')[0];
-        const dayRef = ref(db, `archivedDaysHistory/${rawDate}`);
-        set(dayRef, archiveGroup);
-    };
-
-    // Resets ONLY active logs without deleting history
-    window.clearActiveOnly = function() {
-        if (confirm("Clear current active list for a new start? (Past archived days will stay saved in database)")) {
-            window.orderLog = [];
-            window.saveAllData();
-        }
-    };
-
-    // Real-time listener for active table
-    onValue(activeRef, (snapshot) => {
-        const data = snapshot.val();
-        const badge = document.getElementById('syncBadge');
-        if (badge) {
-            badge.innerText = "Realtime Cloud Active";
-            badge.style.backgroundColor = "#27ae60";
-        }
-        if (data) {
-            if (data.orderDate) document.getElementById('orderDate').value = data.orderDate;
-            if (data.menuItemsInput) document.getElementById('menuItemsInput').value = data.menuItemsInput;
-            window.orderLog = data.orderLog || [];
-        } else {
-            window.orderLog = [];
-        }
-        window.updateMenuOptions(false);
-        window.renderTables(false);
-    });
-
-    // Real-time listener for permanent database archives
-    onValue(archiveRef, (snapshot) => {
-        const data = snapshot.val();
-        window.archivedLogs = [];
-        if (data) {
-            // Convert database object into array for display
-            Object.keys(data).forEach(dateKey => {
-                window.archivedLogs.push(data[dateKey]);
-            });
-        }
-        window.renderTables(false);
-    });
-</script>
-
+<!-- APPLICATION LOGIC -->
 <script>  
     var availableMenu = {};  
     var orderLog = [];  
     var archivedLogs = []; 
     var editingIndex = -1;
-  
+
+    // Fallback stub functions until Firebase Module loads
+    window.saveAllData = function() {};
+    window.saveArchiveToDatabase = function() {};
+
     document.getElementById('orderDate').valueAsDate = new Date();  
 
     function formatQuantity(num) {
@@ -605,7 +528,7 @@
         nameInput.value = '';  
         document.getElementById('itemSelectionContainer').innerHTML = '';  
         addItemRow();  
-        renderTables();  
+        renderTables(true);  
     }  
 
     function updateCustomTotal(index, value, isArchived = false, archiveGroupIdx = -1) {
@@ -614,8 +537,8 @@
             recalculateArchivedDayTotal(archiveGroupIdx);
         } else {
             orderLog[index].customTotal = value;
+            if (window.saveAllData) window.saveAllData();
         }
-        if (window.saveAllData) window.saveAllData();
     }
 
     function recalculateArchivedDayTotal(gIdx) {
@@ -628,7 +551,9 @@
             dayTotalInput.value = sum.toFixed(2);
         }
         calculateGrandTotal();
-        if (window.saveAllData) window.saveAllData();
+        if (window.saveArchiveToDatabase) {
+            window.saveArchiveToDatabase(archivedLogs[gIdx]);
+        }
     }
 
     function updatePaymentStatus(index, newStatus, isArchived = false, archiveGroupIdx = -1, selectElem) {
@@ -656,21 +581,25 @@
         if (newStatus === 'UNPAID') remarkTd.className = 'status-unpaid';
 
         timestampTd.innerText = targetLog.paidTimeStamp || '—';
-        if (window.saveAllData) window.saveAllData();
+        
+        if (isArchived) {
+            if (window.saveArchiveToDatabase) window.saveArchiveToDatabase(archivedLogs[archiveGroupIdx]);
+        } else {
+            if (window.saveAllData) window.saveAllData();
+        }
     }
 
     function updateArchiveMeta(gIdx, field, value) {
-    if (archivedLogs[gIdx]) {
-        archivedLogs[gIdx][field] = value;
-        if (field === 'dayTotal') {
-            calculateGrandTotal();
-        }
-        // Save updated archived group back to Firebase
-        if (window.saveArchiveToDatabase) {
-            window.saveArchiveToDatabase(archivedLogs[gIdx]);
+        if (archivedLogs[gIdx]) {
+            archivedLogs[gIdx][field] = value;
+            if (field === 'dayTotal') {
+                calculateGrandTotal();
+            }
+            if (window.saveArchiveToDatabase) {
+                window.saveArchiveToDatabase(archivedLogs[gIdx]);
+            }
         }
     }
-}
 
     function calculateGrandTotal() {
         let grandTotal = archivedLogs.reduce((sum, group) => sum + (parseFloat(group.dayTotal) || 0), 0);
@@ -678,56 +607,56 @@
     }
 
     function archiveCurrentDay() {
-    if (orderLog.length === 0) {
-        alert('No active orders to archive.');
-        return;
+        if (orderLog.length === 0) {
+            alert('No active orders to archive.');
+            return;
+        }
+        const rawDate = document.getElementById('orderDate').value;
+        
+        const dateExists = archivedLogs.some(group => group.dateKey === rawDate);
+        
+        if (dateExists) {
+            alert(`The date "${rawDate}" has already been archived!\n\nPlease change the Order Date first before archiving a new day.`);
+            return;
+        }
+
+        const dateStr = getFormattedDate(rawDate);
+        let calculatedDayTotal = orderLog.reduce((sum, order) => sum + (parseFloat(order.customTotal) || 0), 0);
+
+        const archiveGroup = {
+            dateKey: rawDate,
+            date: dateStr,
+            orders: JSON.parse(JSON.stringify(orderLog)),
+            gcashRef1: '',
+            gcashRef2: '',
+            dayTotal: calculatedDayTotal.toFixed(2)
+        };
+
+        window.saveArchiveToDatabase(archiveGroup);
+
+        orderLog = [];
+        window.saveAllData();
     }
-    const rawDate = document.getElementById('orderDate').value;
-    
-    // Check if the selected date already exists in the archive database
-    const dateExists = window.archivedLogs.some(group => group.dateKey === rawDate);
-    
-    if (dateExists) {
-        alert(`The date "${rawDate}" has already been archived!\n\nPlease change the Order Date first before archiving a new day.`);
-        return;
-    }
 
-    const dateStr = getFormattedDate(rawDate);
-    let calculatedDayTotal = orderLog.reduce((sum, order) => sum + (parseFloat(order.customTotal) || 0), 0);
-
-    const archiveGroup = {
-        dateKey: rawDate,
-        date: dateStr,
-        orders: JSON.parse(JSON.stringify(orderLog)),
-        gcashRef1: '',
-        gcashRef2: '',
-        dayTotal: calculatedDayTotal.toFixed(2)
-    };
-
-    window.saveArchiveToDatabase(archiveGroup);
-
-    orderLog = [];
-    window.saveAllData();
-    }
     function checkArchiveButtonState() {
-    const rawDate = document.getElementById('orderDate').value;
-    const archiveBtn = document.querySelector('.btn-archive');
-    if (!archiveBtn) return;
+        const rawDate = document.getElementById('orderDate').value;
+        const archiveBtn = document.querySelector('.btn-archive');
+        if (!archiveBtn) return;
 
-    const dateExists = (window.archivedLogs || []).some(group => group.dateKey === rawDate);
-    
-    if (dateExists) {
-        archiveBtn.disabled = true;
-        archiveBtn.style.opacity = '0.5';
-        archiveBtn.style.cursor = 'not-allowed';
-        archiveBtn.title = 'This date is already archived. Change the date to archive.';
-    } else {
-        archiveBtn.disabled = false;
-        archiveBtn.style.opacity = '1';
-        archiveBtn.style.cursor = 'pointer';
-        archiveBtn.title = '';
+        const dateExists = (archivedLogs || []).some(group => group.dateKey === rawDate);
+        
+        if (dateExists) {
+            archiveBtn.disabled = true;
+            archiveBtn.style.opacity = '0.5';
+            archiveBtn.style.cursor = 'not-allowed';
+            archiveBtn.title = 'This date is already archived. Change the date to archive.';
+        } else {
+            archiveBtn.disabled = false;
+            archiveBtn.style.opacity = '1';
+            archiveBtn.style.cursor = 'pointer';
+            archiveBtn.title = '';
+        }
     }
-}
 
     function editOrder(index) {
         editingIndex = index;
@@ -760,7 +689,7 @@
     function removePerson(index) {  
         if (editingIndex === index) cancelEdit();
         orderLog.splice(index, 1);  
-        renderTables();  
+        renderTables(true);  
     }  
   
     function renderTables(shouldSave = true) {  
@@ -925,6 +854,83 @@
 
     // Initialize menu options on page load
     updateMenuOptions(false);
+</script>
+
+<!-- FIREBASE REALTIME DATABASE INTEGRATION -->
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyCteao4i_S-uA6wpfoDIj7BFwuPwJHEmGY",
+        authDomain: "lunch-reserve-10dd8.firebaseapp.com",
+        databaseURL: "https://lunch-reserve-10dd8-default-rtdb.asia-southeast1.firebasedatabase.app",
+        projectId: "lunch-reserve-10dd8",
+        storageBucket: "lunch-reserve-10dd8.firebasestorage.app",
+        messagingSenderId: "613747529032",
+        appId: "1:613747529032:web:8e3cbd16c0ed3d91e38f7d",
+        measurementId: "G-YTD8KTHR4M"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    const activeRef = ref(db, 'activeOrdersState');
+    const archiveRef = ref(db, 'archivedDaysHistory');
+
+    // Attach sync functions to global window object
+    window.saveAllData = function() {
+        const appState = {
+            orderDate: document.getElementById('orderDate').value,
+            menuItemsInput: document.getElementById('menuItemsInput').value,
+            orderLog: orderLog || []
+        };
+        set(activeRef, appState);
+    };
+
+    window.saveArchiveToDatabase = function(archiveGroup) {
+        const rawDate = archiveGroup.dateKey || document.getElementById('orderDate').value || new Date().toISOString().split('T')[0];
+        const dayRef = ref(db, `archivedDaysHistory/${rawDate}`);
+        set(dayRef, archiveGroup);
+    };
+
+    window.clearActiveOnly = function() {
+        if (confirm("Clear current active list for a new start? (Past archived days will stay saved in database)")) {
+            orderLog = [];
+            window.saveAllData();
+        }
+    };
+
+    // Real-time listener for active state
+    onValue(activeRef, (snapshot) => {
+        const badge = document.getElementById('syncBadge');
+        if (badge) {
+            badge.innerText = "Realtime Cloud Active";
+            badge.style.backgroundColor = "#27ae60";
+        }
+        const data = snapshot.val();
+        if (data) {
+            if (data.orderDate) document.getElementById('orderDate').value = data.orderDate;
+            if (data.menuItemsInput) document.getElementById('menuItemsInput').value = data.menuItemsInput;
+            orderLog = data.orderLog || [];
+        } else {
+            orderLog = [];
+        }
+        updateMenuOptions(false);
+        renderTables(false);
+    });
+
+    // Real-time listener for database archives
+    onValue(archiveRef, (snapshot) => {
+        const data = snapshot.val();
+        archivedLogs = [];
+        if (data) {
+            Object.keys(data).forEach(dateKey => {
+                archivedLogs.push(data[dateKey]);
+            });
+        }
+        renderTables(false);
+    });
 </script>
 </body>  
 </html>
