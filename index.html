@@ -248,6 +248,11 @@
             width: 140px;
         }
 
+        /* Bottom alignment for total summary quantity cell */
+        .align-bottom {
+            vertical-align: bottom !important;
+        }
+
         #print-area { display: none; }  
 
         @media print {  
@@ -255,7 +260,7 @@
             #print-area { display: block !important; }  
             body { background-color: white; margin: 0; }  
             .container { box-shadow: none; padding: 0; }  
-            .page-break { page-break-before: always; margin-top: 20px; }
+            .print-page-break { page-break-before: always !important; break-before: page !important; margin-top: 0; }
         }  
     </style>
 </head>  
@@ -363,50 +368,41 @@
 
 <!-- PRINTABLE TEMPLATE -->  
 <div id="print-area">  
-    <h2 style="text-align: center; margin-bottom: 5px; font-size: 1.3rem;">ORDER SUMMARY</h2>  
-    <h4 style="text-align: center; margin-top: 0; font-weight: normal;" class="printDateHeading"></h4>  
-    <hr style="border: 1px solid #000; margin-bottom: 20px;">  
-    
-    <h4 style="margin-bottom: 8px;">1. Total Menu Items Needed (Kitchen Summary)</h4>  
-    <table style="width:100%; border-collapse:collapse;" id="printSummaryTable">  
-        <thead>  
-            <tr style="background:#eee;">  
-                <th style="border:1px solid #000; padding:6px;">Item Name</th>  
-                <th style="border:1px solid #000; padding:6px;">Total Quantity</th>  
-            </tr>  
-        </thead>  
-        <tbody></tbody>  
-    </table>  
+    <!-- Page 1: Kitchen Summary -->
+    <div>
+        <h2 style="text-align: center; margin-bottom: 5px; font-size: 1.3rem;">ORDER SUMMARY</h2>  
+        <h4 style="text-align: center; margin-top: 0; font-weight: normal;" class="printDateHeading"></h4>  
+        <hr style="border: 1px solid #000; margin-bottom: 20px;">  
+        
+        <h4 style="margin-bottom: 8px;">1. Total Menu Items Needed (Kitchen Summary)</h4>  
+        <table style="width:100%; border-collapse:collapse;" id="printSummaryTable">  
+            <thead>  
+                <tr style="background:#eee;">  
+                    <th style="border:1px solid #000; padding:6px;">Item Name</th>  
+                    <th style="border:1px solid #000; padding:6px; vertical-align: bottom;">Total Quantity</th>  
+                </tr>  
+            </thead>  
+            <tbody></tbody>  
+        </table>  
+    </div>
 
-    <h4 style="margin-top: 20px; margin-bottom: 8px;">2. Order Details Breakdown</h4>  
-    <table style="width:100%; border-collapse:collapse;" id="printOrderBreakdownTable">  
-        <thead>  
-            <tr style="background:#eee;">  
-                <th style="border:1px solid #000; padding:6px; width:30%;">Name</th>  
-                <th style="border:1px solid #000; padding:6px;">Order Details</th>  
-            </tr>  
-        </thead>  
-        <tbody></tbody>  
-    </table>
+    <!-- Page 2: Order Details Breakdown -->
+    <div class="print-page-break">
+        <h2 style="text-align: center; margin-bottom: 5px; font-size: 1.3rem; padding-top: 10px;">ORDER DETAILS BREAKDOWN</h2>  
+        <h4 style="text-align: center; margin-top: 0; font-weight: normal;" class="printDateHeading"></h4>  
+        <hr style="border: 1px solid #000; margin-bottom: 20px;">  
 
-    <div class="page-break"></div>
-
-    <h2 style="text-align: center; margin-bottom: 5px; font-size: 1.3rem;">PAYMENT TRACKER & REMARKS</h2>  
-    <h4 style="text-align: center; margin-top: 0; font-weight: normal;" class="printDateHeading"></h4>  
-    <hr style="border: 1px solid #000; margin-bottom: 20px;">  
-
-    <h4 style="margin-bottom: 8px;">Individual Payment Status & Remarks</h4>  
-    <table style="width:100%; border-collapse:collapse;" id="printPaymentBreakdownTable">  
-        <thead>  
-            <tr style="background:#eee;">  
-                <th style="border:1px solid #000; padding:6px; width:30%;">Name</th>  
-                <th style="border:1px solid #000; padding:6px;">Total Amount</th>  
-                <th style="border:1px solid #000; padding:6px;">Remark</th>  
-                <th style="border:1px solid #000; padding:6px;">Paid Date/Time</th>  
-            </tr>  
-        </thead>  
-        <tbody></tbody>  
-    </table>
+        <h4 style="margin-bottom: 8px;">2. Order Details Breakdown</h4>  
+        <table style="width:100%; border-collapse:collapse;" id="printOrderBreakdownTable">  
+            <thead>  
+                <tr style="background:#eee;">  
+                    <th style="border:1px solid #000; padding:6px; width:30%;">Name</th>  
+                    <th style="border:1px solid #000; padding:6px;">Order Details</th>  
+                </tr>  
+            </thead>  
+            <tbody></tbody>  
+        </table>
+    </div>
 </div>  
 
 <!-- APPLICATION LOGIC -->
@@ -743,7 +739,7 @@
   
         Object.keys(totals).forEach(item => {  
             let tr = document.createElement('tr');  
-            tr.innerHTML = `<td>${item}</td><td><strong>${formatQuantity(totals[item])}</strong></td>`;  
+            tr.innerHTML = `<td>${item}</td><td class="align-bottom"><strong>${formatQuantity(totals[item])}</strong></td>`;  
             summaryBody.appendChild(tr);  
         });  
 
@@ -826,7 +822,19 @@
         printDateHeadings.forEach(h => h.innerText = formattedDate);
 
         const printSummaryBody = document.querySelector('#printSummaryTable tbody');
-        printSummaryBody.innerHTML = document.querySelector('#summaryTable tbody').innerHTML;
+        printSummaryBody.innerHTML = '';
+        
+        // Re-build summary table with bottom-aligned quantity cells
+        let totals = {};
+        orderLog.forEach(entry => {
+            entry.items.forEach(i => { totals[i.item] = (totals[i.item] || 0) + i.qty; });
+        });
+        
+        Object.keys(totals).forEach(item => {
+            let tr = document.createElement('tr');
+            tr.innerHTML = `<td style="border:1px solid #000; padding:6px;">${item}</td><td style="border:1px solid #000; padding:6px; vertical-align: bottom;"><strong>${formatQuantity(totals[item])}</strong></td>`;
+            printSummaryBody.appendChild(tr);
+        });
 
         const printOrderBody = document.querySelector('#printOrderBreakdownTable tbody');
         printOrderBody.innerHTML = '';
@@ -834,19 +842,6 @@
             let tr = document.createElement('tr');
             tr.innerHTML = `<td style="border:1px solid #000; padding:6px;"><strong>${entry.name}</strong></td><td style="border:1px solid #000; padding:6px;">${buildCombinedOrderDetails(entry.items)}</td>`;
             printOrderBody.appendChild(tr);
-        });
-
-        const printPaymentBody = document.querySelector('#printPaymentBreakdownTable tbody');
-        printPaymentBody.innerHTML = '';
-        orderLog.forEach(entry => {
-            let tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td style="border:1px solid #000; padding:6px;"><strong>${entry.name}</strong></td>
-                <td style="border:1px solid #000; padding:6px;">₱${entry.customTotal}</td>
-                <td style="border:1px solid #000; padding:6px;">${entry.paymentStatus}</td>
-                <td style="border:1px solid #000; padding:6px;">${entry.paidTimeStamp || '—'}</td>
-            `;
-            printPaymentBody.appendChild(tr);
         });
 
         window.print();
