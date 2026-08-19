@@ -354,7 +354,7 @@
             <thead>
                 <tr>
                     <th>Customer Name</th>
-                    <th>Adjusted Total (₱)</th>
+                    <th>Subtotal (₱)</th>
                     <th>Remark</th>
                     <th>Paid Date/Time</th>
                     <th>Update Payment</th>
@@ -591,7 +591,9 @@
     function updateCustomTotal(index, value, isArchived = false, archiveGroupIdx = -1) {
         if (isArchived) {
             archivedLogs[archiveGroupIdx].orders[index].customTotal = value;
-            recalculateArchivedDayTotal(archiveGroupIdx);
+            if (window.saveArchiveToDatabase) {
+                window.saveArchiveToDatabase(archivedLogs[archiveGroupIdx]);
+            }
         } else {
             orderLog[index].customTotal = value;
             if (window.saveAllData) window.saveAllData();
@@ -599,24 +601,12 @@
     }
 
     function formatInputOnBlur(elem, index, isArchived = false, archiveGroupIdx = -1) {
-        const formatted = formatCurrency(elem.value);
-        elem.value = formatted;
-        updateCustomTotal(index, formatted, isArchived, archiveGroupIdx);
-    }
-
-    function recalculateArchivedDayTotal(gIdx) {
-        if (!archivedLogs[gIdx]) return;
-        let sum = archivedLogs[gIdx].orders.reduce((acc, order) => acc + parseAmount(order.customTotal), 0);
-        const formattedDayTotal = formatCurrency(sum);
-        archivedLogs[gIdx].dayTotal = formattedDayTotal;
-        
-        const dayTotalInput = document.getElementById(`dayTotalInput-${gIdx}`);
-        if (dayTotalInput) {
-            dayTotalInput.value = formattedDayTotal;
-        }
-        calculateGrandTotal();
-        if (window.saveArchiveToDatabase) {
-            window.saveArchiveToDatabase(archivedLogs[gIdx]);
+        if (isArchived) {
+            updateCustomTotal(index, elem.value, true, archiveGroupIdx);
+        } else {
+            const formatted = formatCurrency(elem.value);
+            elem.value = formatted;
+            updateCustomTotal(index, formatted, false, -1);
         }
     }
 
@@ -849,7 +839,7 @@
                             <tr>
                                 <th>Customer Name</th>
                                 <th>Ordered Items</th>
-                                <th>Adjusted Total (₱)</th>
+                                <th>Subtotal (₱)</th>
                                 <th>Remark</th>
                                 <th>Paid Date/Time</th>
                                 <th>Update Payment</th>
@@ -863,13 +853,12 @@
                     if (entry.paymentStatus === 'PAID (GCASH)') statusClass = 'status-gcash';
                     
                     let itemDesc = buildCombinedOrderDetails(entry.items);
-                    let formattedVal = formatCurrency(entry.customTotal);
-                    entry.customTotal = formattedVal;
+                    let displayVal = entry.customTotal || '';
 
                     html += `<tr>
                         <td><strong>${entry.name}</strong></td>
                         <td>${itemDesc}</td>
-                        <td><input type="text" class="price-input" value="${formattedVal}" onchange="updateCustomTotal(${idx}, this.value, true, ${gIdx})" onblur="formatInputOnBlur(this, ${idx}, true, ${gIdx})"></td>
+                        <td><input type="text" class="price-input" value="${displayVal}" onchange="updateCustomTotal(${idx}, this.value, true, ${gIdx})" onblur="formatInputOnBlur(this, ${idx}, true, ${gIdx})"></td>
                         <td class="${statusClass}">${entry.paymentStatus}</td>
                         <td>${entry.paidTimeStamp || '—'}</td>
                         <td>
