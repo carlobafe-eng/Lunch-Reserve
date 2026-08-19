@@ -119,9 +119,6 @@
         .btn-print { background-color: var(--primary-color); color: white; width: 100%; padding: 12px; font-size: 1rem; margin-top: 10px; }  
         .btn-print:hover { background-color: #1a252f; }  
 
-        .btn-clear-all { background-color: #c0392b; color: white; padding: 8px 12px; font-size: 0.85rem; margin-top: 15px; float: right; }
-        .btn-clear-all:hover { background-color: #962d22; }
-
         .button-group {
             display: flex;
             flex-direction: column;
@@ -179,6 +176,28 @@
             margin-top: 30px;
             padding-top: 20px;
             border-top: 2px dashed #bdc3c7;
+        }
+
+        .archive-filter-bar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+            background-color: #eef2f5;
+            padding: 10px 15px;
+            border-radius: 6px;
+        }
+
+        .archive-filter-bar label {
+            margin-bottom: 0;
+            white-space: nowrap;
+            font-size: 0.95rem;
+        }
+
+        .archive-filter-bar select {
+            max-width: 200px;
+            background-color: #fff;
+            font-weight: bold;
         }
 
         .grand-total-banner {
@@ -371,14 +390,20 @@
     <div class="archive-section" id="archiveContainer">
         <h2>Archived Past Orders & Pending Payments</h2>
         
+        <!-- Filter Selector for Archive Month -->
+        <div class="archive-filter-bar">
+            <label for="monthFilter">Select Archive Month:</label>
+            <select id="monthFilter" onchange="renderTables(false)">
+                <option value="ALL">All Months</option>
+            </select>
+        </div>
+
         <div class="grand-total-banner">
-            <span>GRAND TOTAL OF ALL ARCHIVED DAYS:</span>
+            <span id="grandTotalLabel">GRAND TOTAL OF SELECTED ARCHIVES:</span>
             <div class="grand-total-display" id="grandTotalDisplay">₱0.00</div>
         </div>
 
         <div id="archiveList"></div>
-        <button class="btn-clear-all" onclick="clearActiveOnly()">Clear Active Day Only</button>
-        <div style="clear: both;"></div>
     </div>
 </div>  
 
@@ -434,7 +459,6 @@
 
     document.getElementById('orderDate').valueAsDate = new Date();  
 
-    // Safely parse numbers by removing non-numeric characters except decimals
     function parseAmount(amount) {
         if (typeof amount === 'number') return amount;
         if (!amount) return 0;
@@ -442,7 +466,6 @@
         return parseFloat(cleaned) || 0;
     }
 
-    // Always formats numbers to 1,000.00 standard
     function formatCurrency(amount) {
         const num = parseAmount(amount);
         return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -479,7 +502,6 @@
         });
 
         const totalValue = wholeCount + (halfCount * 0.5);
-
         const floorVal = Math.floor(totalValue);
         let totalDisplay = (totalValue % 1 === 0.5) 
             ? (floorVal === 0 ? '½' : `${floorVal}½`) 
@@ -660,8 +682,37 @@
         }
     }
 
-    function calculateGrandTotal() {
-        let grandTotal = archivedLogs.reduce((sum, group) => sum + parseAmount(group.dayTotal), 0);
+    function populateMonthFilter() {
+        const select = document.getElementById('monthFilter');
+        const currentSelection = select.value || 'ALL';
+
+        const monthsSet = new Set();
+        archivedLogs.forEach(group => {
+            const key = group.dateKey || '';
+            if (key.length >= 7) {
+                monthsSet.add(key.substring(0, 7));
+            }
+        });
+
+        const sortedMonths = Array.from(monthsSet).sort((a, b) => b.localeCompare(a));
+        
+        select.innerHTML = '<option value="ALL">All Months</option>';
+        sortedMonths.forEach(m => {
+            const [y, mm] = m.split('-');
+            const dateObj = new Date(parseInt(y), parseInt(mm) - 1, 1);
+            const label = dateObj.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+            
+            const opt = document.createElement('option');
+            opt.value = m;
+            opt.innerText = label;
+            if (m === currentSelection) opt.selected = true;
+            select.appendChild(opt);
+        });
+    }
+
+    function calculateGrandTotal(visibleGroups) {
+        const targetList = visibleGroups || archivedLogs;
+        let grandTotal = targetList.reduce((sum, group) => sum + parseAmount(group.dayTotal), 0);
         document.getElementById('grandTotalDisplay').innerText = `₱${formatCurrency(grandTotal)}`;
     }
 
@@ -821,13 +872,26 @@
             summaryBody.appendChild(tr);  
         });  
 
+        populateMonthFilter();
+        const selectedMonth = document.getElementById('monthFilter').value || 'ALL';
+
         // Render Archived Logs
         const archiveListDiv = document.getElementById('archiveList');
         archiveListDiv.innerHTML = '';
+        
+        let visibleGroups = [];
+
         if (archivedLogs.length === 0) {
             archiveListDiv.innerHTML = '<p style="color:#7f8c8d;">No archived orders yet.</p>';
         } else {
             archivedLogs.forEach((group, gIdx) => {
+                const groupMonth = (group.dateKey || '').substring(0, 7);
+                if (selectedMonth !== 'ALL' && groupMonth !== selectedMonth) {
+                    return; // Skip if filtered out
+                }
+
+                visibleGroups.push(group);
+
                 let card = document.createElement('div');
                 card.className = 'config-card';
                 card.style.marginBottom = '15px';
@@ -891,9 +955,13 @@
                 card.innerHTML = html;
                 archiveListDiv.appendChild(card);
             });
+
+            if (visibleGroups.length === 0) {
+                archiveListDiv.innerHTML = '<p style="color:#7f8c8d;">No archives found for the selected month.</p>';
+            }
         }
 
-        calculateGrandTotal();
+        calculateGrandTotal(visibleGroups);
         checkArchiveButtonState();
         if (shouldSave && window.saveAllData) window.saveAllData();
     }
@@ -979,15 +1047,10 @@
 
     window.saveArchiveToDatabase = function(archiveGroup) {
         const rawDate = archiveGroup.dateKey || document.getElementById('orderDate').value || new Date().toISOString().split('T')[0];
-        const dayRef = ref(db, `archivedDaysHistory/${rawDate}`);
+        const monthFolder = rawDate.substring(0, 7); // e.g. "2026-07"
+        
+        const dayRef = ref(db, `archivedDaysHistory/${monthFolder}/${rawDate}`);
         set(dayRef, archiveGroup);
-    };
-
-    window.clearActiveOnly = function() {
-        if (confirm("Clear current active list for a new start? (Past archived days will stay saved in database)")) {
-            orderLog = [];
-            window.saveAllData();
-        }
     };
 
     onValue(activeRef, (snapshot) => {
@@ -1012,9 +1075,21 @@
         const data = snapshot.val();
         archivedLogs = [];
         if (data) {
+            // Sort outer keys (months or legacy dates) descending
             const sortedKeys = Object.keys(data).sort((a, b) => b.localeCompare(a));
-            sortedKeys.forEach(dateKey => {
-                archivedLogs.push(data[dateKey]);
+            
+            sortedKeys.forEach(key => {
+                const item = data[key];
+                // If it's a month subfolder (contains day objects)
+                if (item && typeof item === 'object' && !item.orders) {
+                    const subKeys = Object.keys(item).sort((a, b) => b.localeCompare(a));
+                    subKeys.forEach(subKey => {
+                        archivedLogs.push(item[subKey]);
+                    });
+                } else {
+                    // Fallback for legacy flat archive records
+                    archivedLogs.push(item);
+                }
             });
         }
         renderTables(false);
